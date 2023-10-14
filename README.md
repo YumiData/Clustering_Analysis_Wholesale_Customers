@@ -6,9 +6,11 @@ Company XYZ is a wholesale distributor that serves a number of business clients,
 
 ## Procedure of Clustering Analysis
 * Explore the dataset and check all the missing/ na/ outlier data
-* Draw Elbow Plot to decide the optimal cluster number
 * Apply Hierarchical and K-Means methods
-* Analyze the result and use Tableau to visualize the underlying pattern of the data
+* Evaluate Clustering Solutions: SSE and Slihouette Coefficient
+* Analysis after clustering
+* Summary for clustering and other analysis results
+
 
 ## Result
 Through the clustering analysis, there exists different and specific spending patterns in each cluster.A cluster number of 5 is the most reasonable to make further business recommendations.
