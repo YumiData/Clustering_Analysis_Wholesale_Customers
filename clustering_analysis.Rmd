@@ -1,0 +1,178 @@
+---
+title: "Clustering Analysis on Wholesale Customer (Hierarchical & K-Means)"
+author: "yumi yu"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+wholesale <- read.csv('wholesale_customers_data.csv')
+```
+
+### Procedure of Data Analysis:
+1. EDA before Clustering
+2. Hierarchical Clustering
+3. K-Means Clustering
+4. Evaluate Clustering Solutions: SSE and Slihouette Coefficient
+6. Analysis after clustering
+7. Summary for clustering and other analysis results
+
+### Variable Name Description
+Channel: Client channel (“1” means Horeca (Hotel/Restaurant/Cafe) and “2” means Retail)
+Region: Client region (“1” means Lisbon, “2” means Oporto, and “3” means other regions)
+Fresh: Annual spending on fresh products.
+Milk: Annual spending on milk products.
+Grocery: Annual spending on grocery products.
+Frozen: Annual spending on frozen products.
+Detergents Paper: Annual spending on detergents and paper products.
+Delicatessen: Annual spending on deli products.
+
+### EDA before Clustering
+```{r}
+par(mfrow = c(1, 2))
+
+# pie chart for region
+pie(table(wholesale$Region), labels = round(table(wholesale$Region)/440, 2), main = "Region Pie Chart", col = rainbow(3))
+legend("topright", c("1","2","3"), cex = 0.8, fill = rainbow(3))
+
+# pie chart for channel
+pie(table(wholesale$Channel), labels = round(table(wholesale$Channel)/440, 2), main = "Channel Pie Chart", col = rainbow(2))
+legend("topright", c("1","2"), cex = 0.8, fill = rainbow(2))
+```
+```{r}
+# check correlation among variables
+pairs(wholesale[, 3:8], cex = 0.5, pch = 20)
+```
+```{r}
+library(corrplot)
+corrplot(cor(wholesale[, 3:8]), type = 'upper', addCoef.col = 'gray')
+```
+
+### Hierarchical Clustering
+##### Normalization
+```{r}
+normalize = function(x) {
+return((x - min(x)) / (max(x) - min(x)))
+}
+# use the mutate_at() to specify the indexes of columns needed normalization
+ws_normalized <- wholesale %>% mutate_at(c(3:8), normalize)
+# we also preserve a normalized dataset for k-means later
+ws_normalized_k <- wholesale %>% mutate_at(c(3:8), normalize)
+```
+
+##### Distance Matrix
+```{r}
+# dist() from package stats can generate distance matrix
+library(stats)
+# prepare the distance matrix
+# the euclidean distance method
+distance_matrix <- dist(ws_normalized[, 3:8], method = "euclidean")
+```
+
+##### Hierarchical Clustering
+```{r}
+# we use Ward's Method to measure distances
+# plot the dendrogram
+hierarchical = hclust(distance_matrix, method = "ward.D") 
+plot(hierarchical)
+```
+
+##### Check the Cluster Number of 4, 5, and 6 Respectively
+```{r}
+par(mfrow = c(1, 3))
+# set cluster number = 4
+plot(hierarchical)
+# rect.hclust() can mark the clustering solution for a given number of clusters rect.hclust(hierarchical, k = 4)
+# set cluster number = 5
+plot(hierarchical)
+# rect.hclust() can mark the clustering solution for a given number of clusters rect.hclust(hierarchical, k = 5)
+# set cluster number = 6
+plot(hierarchical)
+# rect.hclust() can mark the clustering solution for a given number of clusters rect.hclust(hierarchical, k = 6)
+```
+
+##### Check the number of data in each cluster
+```{r}
+# curtree() can cut the dendrogram and tell you which entities belong to which clust er
+ws_normalized$hcluster <- cutree(hierarchical, k = 5)
+# also append the cluster labels on the original dataset, maybe we will need this
+wholesale$hcluster <- cutree(hierarchical, k = 5) # just show the head of 6 rows
+head(ws_normalized)
+table(ws_normalized$hcluster)
+```
+
+
+### K-Means Clustering
+Based on the results of the previous hierarchical clustering, we are more in favor of 5 or 6 clusters rather than 4, and 5 is more than 6.
+
+#### Set a Cluster Number of 5 First
+```{r}
+# use a this normalized dataset that we've preserved previously, ws_normalized_k # note that kmeans() works only with Euclidean distance
+kcluster <- kmeans(ws_normalized_k[, 3:8], centers = 5)
+head(kcluster$centers) # can see the centroids
+```
+
+##### Visualize the Results
+```{r}
+library(cluster)
+library(fpc)
+library(mclust)
+library(FactoMineR)
+library(factoextra)
+# cluster plot
+fviz_cluster(kcluster, data = ws_normalized_k[, 3:8], geom = "point")
+```
+The first PC accounts for about 44.1% of the total variation, while the second counts for 28.4%. There is abvious vairance between different clusters. It is reasonable to have 5 clusters.
+
+##### Set a Cluster Number of 6
+```{r}
+kcluster_6 <- kmeans(ws_normalized_k[, 3:8], centers = 6)
+fviz_cluster(kcluster_6, data = ws_normalized_k[, 3:8], geom = "point")
+```
+For 6 clusters, 4 clusters are on the top-right, which are hard to interpret. Also, there is only 2 data points in a cluster. The performance of 5 clusters is better than 6.
+
+
+### Evaluate Clustering Solutions: SSE Curve.
+```{r}
+# the vector to store the SSE
+SSE_curve = c()
+for (n in 1:10){
+  kc = kmeans(ws_normalized_k[, 3:8], centers = n)
+  SSE_curve[n] = kc$tot.withinss
+}
+# do the plot
+plot_data = data.frame(ncluster = 1:10, SSE = SSE_curve)
+ggplot(plot_data, aes(x = ncluster, y = SSE)) + geom_line() + geom_point() + theme_bw()
+```
+From the elbow plot, it shows that 5 clusters is good enough.
+
+### Silhouette coefficient
+Silhouette coefficient = 1 indicates the data point x is very compact within its own cluster and far away from other clusters. Silhouette coefficient = -1 indicates the opposite situation.
+```{r}
+library(cluster)
+sc <- silhouette(ws_normalized$hcluster, dist = distance_matrix)
+summary(sc)
+```
+
+# Analysis after Clustering
+## Split by region
+```{r}
+ws_normalized_re1 <- ws_normalized %>% filter(Region == 1)
+ws_normalized_re2 <- ws_normalized %>% filter(Region == 2)
+ws_normalized_re3 <- ws_normalized %>% filter(Region == 3)
+```
+
+## Split by channel
+```{r}
+ws_normalized_ch1 <- ws_normalized %>% filter(Channel == 1)
+ws_normalized_ch2 <- ws_normalized %>% filter(Channel == 2)
+corrplot(cor(ws_normalized_ch1[, 3:8]), type = 'upper', addCoef.col = 'gray')
+corrplot(cor(ws_normalized_ch2[, 3:8]), type = 'upper', addCoef.col = 'gray')
+```
+According to the 2 correlation plots, there is strongest positive correlation between Grocery and Detergents_Papers. The strong positive correlations between food products(Fresh, Milk, Frozen, and Delicatessen) appears in channel 1 only after splitting by channel.
+
+### Through analyzing the correlation, we believe the channels segmentation could preserve or even create meaningful correlation for the data, thus it might be a good idea to do different business strategies in channel 1 and 2, respectively.
+However, we didn’t find valuable insights in terms of region, so we might not suggest do further strategies in different regions.
